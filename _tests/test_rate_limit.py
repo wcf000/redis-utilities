@@ -13,7 +13,7 @@ from unittest.mock import patch
 
 import pytest
 
-from app.core.redis.rate_limit import check_rate_limit
+from app.core.redis_utilities.rate_limit import check_rate_limit
 
 logger = logging.getLogger(__name__)
 
@@ -22,8 +22,8 @@ logger = logging.getLogger(__name__)
 
 from unittest.mock import patch
 
-@patch("app.core.redis.rate_limit.get_rate_limit_requests")
-@patch("app.core.redis.rate_limit.get_rate_limit_gauge")
+@patch("app.core.redis_utilities.rate_limit.get_rate_limit_requests")
+@patch("app.core.redis_utilities.rate_limit.get_rate_limit_gauge")
 @pytest.mark.asyncio
 async def test_burst_handling(mock_gauge, mock_requests, redis_client):
     """
@@ -68,7 +68,7 @@ async def test_burst_handling(mock_gauge, mock_requests, redis_client):
 async def test_distributed_consistency_failover():
     """Test rate limiting failover when Redis client is unavailable (fail-closed)"""
     identifier = "dist_id"
-    with patch("app.core.redis.client.RedisClient.get_client") as mock_get_client:
+    with patch("app.core.redis_utilities.client.RedisClient.get_client") as mock_get_client:
         mock_get_client.return_value = None
         assert await check_rate_limit(identifier, 5, 60) is False
 
@@ -87,7 +87,7 @@ async def test_distributed_consistency_normal(redis_client):
 
 
 
-from app.core.redis import rate_limit
+from app.core.redis_utilities import rate_limit
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(

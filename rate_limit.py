@@ -14,7 +14,7 @@ from typing import Optional, Tuple
 
 from circuitbreaker import circuit
 from fastapi import HTTPException, status
-from prometheus_client import Counter, Gauge
+# from prometheus_client import Counter, Gauge
 
 # Prometheus Metrics - Singleton getters to avoid duplicate registration
 
@@ -32,9 +32,9 @@ def get_rate_limit_gauge():
         )
     return get_rate_limit_gauge._metric
 
-from app.core.redis.client import RedisClient
-from app.core.third_party_integrations.supabase_home.app import SupabaseAuthService
-from app.core.third_party_integrations.supabase_home.client import get_supabase_client
+from app.core.redis_utilities.client import RedisClient
+# from app.core.third_party_integrations.supabase_home.app import SupabaseAuthService
+# from app.core.third_party_integrations.supabase_home.client import get_supabase_client
 
 async def get_auth_service():
     client = await get_supabase_client()

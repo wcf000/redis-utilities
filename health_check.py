@@ -8,9 +8,9 @@ from datetime import datetime, timedelta
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
-from app.core.redis.client import RedisClient
-from app.core.redis.config import RedisConfig
-from app.core.redis.rate_limit import service_rate_limit
+from app.core.redis_utilities.client import RedisClient
+from app.core.redis_utilities.config import RedisConfig
+from app.core.redis_utilities.rate_limit import service_rate_limit
 
 router = APIRouter()
 logger = logging.getLogger(__name__)

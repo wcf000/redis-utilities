@@ -14,16 +14,16 @@ from collections.abc import Callable
 from functools import wraps
 from typing import Any, Optional
 import asyncio
-from opentelemetry import trace
+# from opentelemetry import trace
 from redis import asyncio  # ! Needed for coroutine detection
 
-from app.core.prometheus.metrics import (
-    get_redis_cache_deletes,
-    get_redis_cache_hits,
-    get_redis_cache_misses,
-    get_redis_cache_sets,
-)
-from app.core.redis.config import RedisConfig
+# from app.core.prometheus.metrics import (
+#     get_redis_cache_deletes,
+#     get_redis_cache_hits,
+#     get_redis_cache_misses,
+#     get_redis_cache_sets,
+# )
+from app.core.redis_utilities.config import RedisConfig
 
 logger = logging.getLogger(__name__)
 

@@ -12,7 +12,7 @@ import time
 from datetime import datetime
 import pytest
 from unittest.mock import patch
-from app.core.redis.client import RedisClient
+from app.core.redis_utilities.client import RedisClient
 
 logger = logging.getLogger(__name__)
 

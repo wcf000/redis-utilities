@@ -7,10 +7,10 @@ import random
 from collections.abc import Callable, Coroutine
 from typing import Any, TypeVar
 
-from prometheus_client import Counter, REGISTRY
+# from prometheus_client import Counter, REGISTRY
 
-from app.core.redis.client import RedisClient
-from app.core.redis.config import RedisConfig
+from app.core.redis_utilities.client import RedisClient
+from app.core.redis_utilities.config import RedisConfig
 
 logger = logging.getLogger(__name__)
 

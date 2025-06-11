@@ -1,6 +1,6 @@
 from typing import Any
 
-from app.core.redis.client import client as redis_client  # * Unified async Redis client
+from app.core.redis_utilities.client import client as redis_client  # * Unified async Redis client
 
 class RedisFIFOCache:
     """

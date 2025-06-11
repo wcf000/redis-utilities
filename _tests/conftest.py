@@ -8,7 +8,7 @@ import logging
 import socket
 import subprocess
 import pytest
-from app.core.redis.config import RedisConfig
+from app.core.redis_utilities.config import RedisConfig
 
 @pytest.fixture(scope="session", autouse=True)
 def ensure_redis_running():
@@ -65,10 +65,10 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from app.core.redis.client import RedisClient
-from app.core.redis.config import RedisConfig
-from app.core.redis.rate_limit import check_rate_limit
-from app.core.redis.redis_cache import RedisCache
+from app.core.redis_utilities.client import RedisClient
+from app.core.redis_utilities.config import RedisConfig
+from app.core.redis_utilities.rate_limit import check_rate_limit
+from app.core.redis_utilities.redis_cache import RedisCache
 
 
 @pytest.fixture(scope="session", autouse=True)

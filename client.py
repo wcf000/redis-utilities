@@ -14,14 +14,14 @@ import logging
 from typing import Any
 
 from circuitbreaker import circuit
-from opentelemetry import trace
-from opentelemetry.trace import StatusCode
-from prometheus_client import Counter, Gauge, Histogram
+# from opentelemetry import trace
+# from opentelemetry.trace import StatusCode
+# from prometheus_client import Counter, Gauge, Histogram
 from redis.asyncio import Redis, RedisCluster
 from redis.asyncio.cluster import ClusterNode
 from redis.exceptions import RedisError, TimeoutError
 
-from app.core.redis.config import RedisConfig
+from app.core.redis_utilities.config import RedisConfig
 
 REDIS_CLUSTER = RedisConfig.REDIS_CLUSTER
 REDIS_DB = RedisConfig.REDIS_DB

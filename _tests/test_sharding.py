@@ -8,8 +8,8 @@ import pytest
 import redis.asyncio as aioredis
 import logging
 from datetime import datetime
-from app.core.redis.metrics import record_metrics
-from app.core.redis.config import RedisConfig
+from app.core.redis_utilities.metrics import record_metrics
+from app.core.redis_utilities.config import RedisConfig
 
 logger = logging.getLogger(__name__)
 

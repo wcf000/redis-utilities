@@ -4,7 +4,7 @@ Provides record_metrics and other helpers for Prometheus or logging-based metric
 """
 import logging
 
-from prometheus_client import REGISTRY, Counter, Gauge, Histogram
+# from prometheus_client import REGISTRY, Counter, Gauge, Histogram
 
 # Define a counter metric to track Redis operations
 REDIS_OPERATIONS = Counter('redis_operations', 'Number of Redis operations')
