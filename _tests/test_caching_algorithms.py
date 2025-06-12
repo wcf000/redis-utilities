@@ -1,6 +1,6 @@
 import pytest
 import pytest_asyncio
-from app.core.redis_utilities.client import RedisClient
+from app.core.redis.client import RedisClient
 
 @pytest_asyncio.fixture
 async def redis_client_fixture():
@@ -12,11 +12,11 @@ async def redis_client_fixture():
 # ! with a low maxmemory (e.g., 1mb) and an eviction policy (e.g., volatile-lru, volatile-lfu, volatile-ttl).
 # ! Otherwise, Redis will NOT evict keys and all keys will remain present. See Valkey/Redis docs for details.
 
-from app.core.redis_utilities.algorithims.caching.redis_fifo_cache import RedisFIFOCache
-from app.core.redis_utilities.algorithims.caching.redis_lru_cache import RedisLRUCache
-from app.core.redis_utilities.algorithims.caching.redis_lfu_cache import RedisLFUCache
-from app.core.redis_utilities.algorithims.caching.redis_mru_cache import RedisMRUCache
-from app.core.redis_utilities.algorithims.caching.redis_lifo_cache import RedisLIFOCache
+from app.core.redis.algorithims.caching.redis_fifo_cache import RedisFIFOCache
+from app.core.redis.algorithims.caching.redis_lru_cache import RedisLRUCache
+from app.core.redis.algorithims.caching.redis_lfu_cache import RedisLFUCache
+from app.core.redis.algorithims.caching.redis_mru_cache import RedisMRUCache
+from app.core.redis.algorithims.caching.redis_lifo_cache import RedisLIFOCache
 
 @pytest.mark.asyncio
 async def test_fifo_cache_eviction_order(redis_client_fixture):

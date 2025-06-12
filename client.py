@@ -14,14 +14,14 @@ import logging
 from typing import Any
 
 from circuitbreaker import circuit
-# from opentelemetry import trace
-# from opentelemetry.trace import StatusCode
-# from prometheus_client import Counter, Gauge, Histogram
+# from opentelemetry import trace  # Optional dependency
+# from opentelemetry.trace import StatusCode  # Optional dependency
+# from prometheus_client import Counter, Gauge, Histogram  # Optional dependency
 from redis.asyncio import Redis, RedisCluster
 from redis.asyncio.cluster import ClusterNode
 from redis.exceptions import RedisError, TimeoutError
 
-from app.core.redis_utilities.config import RedisConfig
+from app.core.redis.config import RedisConfig
 
 REDIS_CLUSTER = RedisConfig.REDIS_CLUSTER
 REDIS_DB = RedisConfig.REDIS_DB
@@ -50,45 +50,71 @@ DEFAULT_CONNECTION_TIMEOUT = 5.0
 DEFAULT_SOCKET_TIMEOUT = 10.0
 DEFAULT_COMMAND_TIMEOUT = 5.0
 
-# Prometheus metrics - Singleton getter pattern
-
+# Prometheus metrics - Stub implementations
+# These will be replaced with actual implementations when needed
 def get_shard_size_gauge():
+    class DummyGauge:
+        def labels(self, **kwargs):
+            return self
+        def set(self, value):
+            pass
     if not hasattr(get_shard_size_gauge, "_metric"):
-        get_shard_size_gauge._metric = Gauge(
-            'redis_shard_size_bytes',
-            'Size of Redis shards in bytes',
-            ['shard']
-        )
+        get_shard_size_gauge._metric = DummyGauge()
     return get_shard_size_gauge._metric
 
 def get_shard_ops_gauge():
+    class DummyGauge:
+        def labels(self, **kwargs):
+            return self
+        def set(self, value):
+            pass
     if not hasattr(get_shard_ops_gauge, "_metric"):
-        get_shard_ops_gauge._metric = Gauge(
-            'redis_shard_ops_per_sec',
-            'Operations per second per shard',
-            ['shard']
-        )
+        get_shard_ops_gauge._metric = DummyGauge()
     return get_shard_ops_gauge._metric
 
 def get_request_duration_histogram():
+    class DummyHistogram:
+        def labels(self, **kwargs):
+            return self
+        def observe(self, value):
+            pass
     if not hasattr(get_request_duration_histogram, "_metric"):
-        get_request_duration_histogram._metric = Histogram(
-            'redis_request_duration_seconds',
-            'Redis request duration',
-            ['operation', 'shard']
-        )
+        get_request_duration_histogram._metric = DummyHistogram()
     return get_request_duration_histogram._metric
 
 def get_error_counter():
+    class DummyCounter:
+        def labels(self, **kwargs):
+            return self
+        def inc(self, amount=1):
+            pass
     if not hasattr(get_error_counter, "_metric"):
-        get_error_counter._metric = Counter(
-            'redis_errors_total',
-            'Total Redis errors',
-            ['error_type', 'shard']
-        )
+        get_error_counter._metric = DummyCounter()
     return get_error_counter._metric
 
-tracer = trace.get_tracer(__name__)
+# Dummy tracer implementation
+class DummySpan:
+    def __enter__(self):
+        return self
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        pass
+    def set_attribute(self, key, value):
+        pass
+    def set_attributes(self, attributes):
+        pass
+    def set_status(self, status):
+        pass
+    def record_exception(self, exception):
+        pass
+
+class DummyTracer:
+    def start_as_current_span(self, name):
+        return DummySpan()
+    def get_current_span(self):
+        return DummySpan()
+
+# Replace the OpenTelemetry tracer with our dummy implementation
+tracer = DummyTracer()
 
 
 class RedisClient:
@@ -210,7 +236,12 @@ class RedisClient:
     async def __aenter__(self):
         if not await self.is_healthy():
             raise ConnectionError("Redis connection failed")
-        self._metrics_task = asyncio.create_task(self._update_metrics())
+        # Commented out metrics task since we're not using Prometheus
+        # self._metrics_task = asyncio.create_task(self._update_metrics())
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        await self.shutdown()
 
     # --- Redis List Command Passthroughs ---
     async def lrem(self, key: str, count: int, value: str) -> int:
@@ -278,17 +309,14 @@ class RedisClient:
         fallback_function=lambda e: logger.warning(f"Circuit open: {str(e)}"),
     )
     async def get(self, key: str, timeout: float = DEFAULT_COMMAND_TIMEOUT) -> Any:
-        """Get value with tracing"""
-        with tracer.start_as_current_span("redis.get") as span:
-            span.set_attribute("redis.key", key)
-            try:
-                value = await (await self.get_client()).get(key)
-                span.set_status(StatusCode.OK)
-                return json.loads(value) if value else None
-            except Exception as e:
-                span.record_exception(e)
-                span.set_status(StatusCode.ERROR)
-                raise
+        """Get value from Redis"""
+        try:
+            # Simple implementation without tracing
+            value = await (await self.get_client()).get(key)
+            return json.loads(value) if value else None
+        except Exception as e:
+            logger.error(f"Redis get failed for key {key}: {str(e)}")
+            raise
 
     @circuit(
         failure_threshold=REDIS_FAILURE_THRESHOLD,
@@ -299,22 +327,19 @@ class RedisClient:
         self,
         key: str,
         value: Any,
-        ex: int | None,
+        ex: int | None = None,
         timeout: float = DEFAULT_COMMAND_TIMEOUT,
     ) -> bool:
-        """Set value with tracing"""
-        with tracer.start_as_current_span("redis.set") as span:
-            span.set_attributes({"redis.key": key, "redis.ttl": ex or 0})
-            try:
-                result = await (await self.get_client()).set(
-                    key, json.dumps(value), ex=ex
-                )
-                span.set_status(StatusCode.OK)
-                return result
-            except Exception as e:
-                span.record_exception(e)
-                span.set_status(StatusCode.ERROR)
-                raise
+        """Set value in Redis"""
+        try:
+            # Simple implementation without tracing
+            result = await (await self.get_client()).set(
+                key, json.dumps(value), ex=ex
+            )
+            return result
+        except Exception as e:
+            logger.error(f"Redis set failed for key {key}: {str(e)}")
+            raise
 
     async def delete(self, *keys: str, timeout: float = DEFAULT_COMMAND_TIMEOUT) -> int:
         """Delete one or more keys from Redis with timeout"""
@@ -332,74 +357,53 @@ class RedisClient:
             return False
 
     async def _update_metrics(self):
-        """Periodically update Redis metrics"""
+        """
+        Periodically update Redis metrics
+        Note: This is a no-op since we've removed Prometheus,
+        but kept for future compatibility
+        """
         while True:
             try:
-                client = await self.get_client()
-                info = await client.info('all')
-                
-                for shard, stats in info.items():
-                    get_shard_size_gauge().labels(shard=shard).set(stats.get('used_memory', 0))
-                    get_shard_ops_gauge().labels(shard=shard).set(stats.get('instantaneous_ops_per_sec', 0))
-                    
+                # Sleep without doing anything - metrics are disabled
+                await asyncio.sleep(60)
+            except asyncio.CancelledError:
+                break
             except Exception as e:
-                get_error_counter().labels(error_type=str(type(e).__name__), shard='unknown').inc()
                 logger.error(f"Metrics update failed: {e}")
-            
-            await asyncio.sleep(60)  # Update every minute
+                await asyncio.sleep(60)
 
     async def incr(self, key: str, timeout: float = DEFAULT_COMMAND_TIMEOUT) -> int:
         """Increment a key's integer value by 1. Returns new value."""
-        with tracer.start_as_current_span("redis.incr") as span:
-            span.set_attribute("redis.key", key)
-            try:
-                value = await (await self.get_client()).incr(key)
-                span.set_status(StatusCode.OK)
-                return value
-            except Exception as e:
-                span.record_exception(e)
-                span.set_status(StatusCode.ERROR)
-                raise
+        try:
+            return await (await self.get_client()).incr(key)
+        except Exception as e:
+            logger.error(f"Redis incr failed for key {key}: {str(e)}")
+            raise
 
     async def expire(self, key: str, ex: int, timeout: float = DEFAULT_COMMAND_TIMEOUT) -> bool:
         """Set a key's time to live in seconds."""
-        with tracer.start_as_current_span("redis.expire") as span:
-            span.set_attribute("redis.key", key)
-            span.set_attribute("redis.ttl", ex)
-            try:
-                result = await (await self.get_client()).expire(key, ex)
-                span.set_status(StatusCode.OK)
-                return result
-            except Exception as e:
-                span.record_exception(e)
-                span.set_status(StatusCode.ERROR)
-                raise
+        try:
+            return await (await self.get_client()).expire(key, ex)
+        except Exception as e:
+            logger.error(f"Redis expire failed for key {key}: {str(e)}")
+            raise
 
     async def ttl(self, key: str, timeout: float = DEFAULT_COMMAND_TIMEOUT) -> int:
         """Get the time to live (in seconds) of a key."""
-        with tracer.start_as_current_span("redis.ttl") as span:
-            span.set_attribute("redis.key", key)
-            try:
-                value = await (await self.get_client()).ttl(key)
-                span.set_status(StatusCode.OK)
-                return value
-            except Exception as e:
-                span.record_exception(e)
-                span.set_status(StatusCode.ERROR)
-                raise
+        try:
+            return await (await self.get_client()).ttl(key)
+        except Exception as e:
+            logger.error(f"Redis ttl failed for key {key}: {str(e)}")
+            raise
 
     async def exists(self, key: str, timeout: float = DEFAULT_COMMAND_TIMEOUT) -> bool:
         """Check if a key exists in Redis (returns True if exists)."""
-        with tracer.start_as_current_span("redis.exists") as span:
-            span.set_attribute("redis.key", key)
-            try:
-                exists = await (await self.get_client()).exists(key)
-                span.set_status(StatusCode.OK)
-                return exists == 1
-            except Exception as e:
-                span.record_exception(e)
-                span.set_status(StatusCode.ERROR)
-                raise
+        try:
+            exists = await (await self.get_client()).exists(key)
+            return exists == 1
+        except Exception as e:
+            logger.error(f"Redis exists failed for key {key}: {str(e)}")
+            raise
 
     async def scan(self, pattern: str, count: int = 1000, timeout: float = DEFAULT_COMMAND_TIMEOUT) -> list[str]:
         """
@@ -407,24 +411,19 @@ class RedisClient:
         Uses SCAN for safety (never KEYS in production).
         Returns a list of matching keys (decoded to str).
         """
-        with tracer.start_as_current_span("redis.scan") as span:
-            span.set_attribute("redis.pattern", pattern)
-            try:
-                client = await self.get_client()
-                cursor = 0
-                keys = []
-                while True:
-                    cursor, batch = await client.scan(cursor=cursor, match=pattern, count=count)
-                    keys.extend(k.decode() if isinstance(k, bytes) else k for k in batch)
-                    if cursor == 0:
-                        break
-                span.set_status(StatusCode.OK)
-                return keys
-            except Exception as e:
-                span.record_exception(e)
-                span.set_status(StatusCode.ERROR)
-                logger.error(f"Redis scan failed for pattern {pattern}: {str(e)}")
-                raise
+        try:
+            client = await self.get_client()
+            cursor = 0
+            keys = []
+            while True:
+                cursor, batch = await client.scan(cursor=cursor, match=pattern, count=count)
+                keys.extend(k.decode() if isinstance(k, bytes) else k for k in batch)
+                if cursor == 0:
+                    break
+            return keys
+        except Exception as e:
+            logger.error(f"Redis scan failed for pattern {pattern}: {str(e)}")
+            raise
 
 
 # Singleton Redis client instance

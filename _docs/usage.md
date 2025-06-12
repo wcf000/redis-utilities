@@ -9,7 +9,7 @@ This guide covers best practices for using the Redis integration in this codebas
 All Redis settings are centralized in `RedisConfig` and sourced from environment variables or `settings`.
 
 ```python
-from app.core.redis_utilities.config import RedisConfig
+from app.core.redis.config import RedisConfig
 
 host: str = RedisConfig.REDIS_HOST
 port: int = RedisConfig.REDIS_PORT
@@ -23,7 +23,7 @@ port: int = RedisConfig.REDIS_PORT
 The singleton client is async-ready and supports connection pooling, sharding, and circuit breaking.
 
 ```python
-from app.core.redis_utilities.client import client  # Singleton instance
+from app.core.redis.client import client  # Singleton instance
 
 # Async usage
 redis = await client.get_client()
@@ -36,7 +36,7 @@ await redis.ping()
 
 ### Basic Get/Set
 ```python
-from app.core.redis_utilities.redis_cache import redis_cache
+from app.core.redis.redis_cache import redis_cache
 
 # Set value with TTL
 await redis_cache.set("my_key", "value", ttl=600)
@@ -56,7 +56,7 @@ data = redis_cache.get_stats()
 
 ### cache_result Decorator
 ```python
-from app.core.redis_utilities.redis_cache import cache_result
+from app.core.redis.redis_cache import cache_result
 
 @cache_result(expire_seconds=300, key_prefix="user:")
 async def get_user_profile(user_id: str) -> dict:
@@ -66,7 +66,7 @@ async def get_user_profile(user_id: str) -> dict:
 
 ### get_or_set_cache Decorator (Advanced)
 ```python
-from app.core.redis_utilities.decorators import get_or_set_cache
+from app.core.redis.decorators import get_or_set_cache
 
 def user_cache_key(user_id: str) -> str:
     return f"user:{user_id}"
@@ -84,7 +84,7 @@ async def get_user_profile(user_id: str) -> dict:
 
 ### Batch Cache Warming
 ```python
-from app.core.redis_utilities.decorators import warm_cache
+from app.core.redis.decorators import warm_cache
 
 await warm_cache(
     keys=["user:1", "user:2"],
@@ -96,7 +96,7 @@ await warm_cache(
 
 ### Invalidate Cache
 ```python
-from app.core.redis_utilities.decorators import invalidate_cache
+from app.core.redis.decorators import invalidate_cache
 
 await invalidate_cache("user:1", "user:2")
 ```
@@ -107,7 +107,7 @@ await invalidate_cache("user:1", "user:2")
 
 ### verify_and_limit
 ```python
-from app.core.redis_utilities.rate_limit import verify_and_limit
+from app.core.redis.rate_limit import verify_and_limit
 from fastapi import HTTPException
 
 allowed = await verify_and_limit(token, ip, endpoint="/api/resource", window=60)
@@ -117,14 +117,14 @@ if not allowed:
 
 ### check_rate_limit (Low-level)
 ```python
-from app.core.redis_utilities.rate_limit import check_rate_limit
+from app.core.redis.rate_limit import check_rate_limit
 
 is_limited = await check_rate_limit("my_key", limit=100, window=60)
 ```
 
 ### service_rate_limit (Internal/Service)
 ```python
-from app.core.redis_utilities.rate_limit import service_rate_limit
+from app.core.redis.rate_limit import service_rate_limit
 
 allowed = await service_rate_limit("celery_health", limit=10, window=60)
 ```
@@ -135,7 +135,7 @@ allowed = await service_rate_limit("celery_health", limit=10, window=60)
 
 ### RedisHealth Class
 ```python
-from app.core.redis_utilities.health_check import RedisHealth
+from app.core.redis.health_check import RedisHealth
 
 health = RedisHealth()
 status = await health.get_health_status()
@@ -152,14 +152,14 @@ status = await health.get_health_status()
 
 ### get_redis_client
 ```python
-from app.core.redis_utilities.decorators import get_redis_client
+from app.core.redis.decorators import get_redis_client
 
 redis = await get_redis_client()
 ```
 
 ### get_redis_cache
 ```python
-from app.core.redis_utilities.redis_cache import get_redis_cache
+from app.core.redis.redis_cache import get_redis_cache
 
 cache = get_redis_cache()
 ```
@@ -169,7 +169,7 @@ cache = get_redis_cache()
 ## 7. Configuration Reference
 
 ```python
-from app.core.redis_utilities.config import RedisConfig
+from app.core.redis.config import RedisConfig
 
 # Example
 host = RedisConfig.REDIS_HOST

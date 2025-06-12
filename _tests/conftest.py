@@ -8,7 +8,9 @@ import logging
 import socket
 import subprocess
 import pytest
-from app.core.redis_utilities.config import RedisConfig
+from app.core.redis.config import RedisConfig
+from unittest.mock import patch, MagicMock
+from .utilities.mock_supabase import MockSupabaseAuthService, mock_get_supabase_client
 
 @pytest.fixture(scope="session", autouse=True)
 def ensure_redis_running():
@@ -65,10 +67,10 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from app.core.redis_utilities.client import RedisClient
-from app.core.redis_utilities.config import RedisConfig
-from app.core.redis_utilities.rate_limit import check_rate_limit
-from app.core.redis_utilities.redis_cache import RedisCache
+from app.core.redis.client import RedisClient
+from app.core.redis.config import RedisConfig
+from app.core.redis.rate_limit import check_rate_limit
+from app.core.redis.redis_cache import RedisCache
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -179,3 +181,37 @@ def mock_time():
     with patch("time.time") as mock_time:
         mock_time.return_value = 0
         yield mock_time
+
+
+# Add these fixtures to your conftest.py file
+@pytest.fixture
+def mock_supabase_auth_service():
+    """Return a mock Supabase auth service"""
+    return MockSupabaseAuthService()
+
+
+@pytest.fixture
+def mock_supabase_client():
+    """Return a mock Supabase client"""
+    return mock_get_supabase_client()
+
+
+@pytest.fixture
+def patch_supabase():
+    """
+    Patch Supabase dependencies for tests
+    Returns a context manager that can be used in tests
+    """
+    # Create patches for Supabase imports
+    app_patch = patch('app.core.third_party_integrations.supabase_home.app.SupabaseAuthService', 
+                      return_value=MockSupabaseAuthService())
+    
+    client_patch = patch('app.core.third_party_integrations.supabase_home.client.get_supabase_client', 
+                         side_effect=mock_get_supabase_client)
+    
+    # Start and stop patches
+    app_patch.start()
+    client_patch.start()
+    yield
+    app_patch.stop()
+    client_patch.stop()

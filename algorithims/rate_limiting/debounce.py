@@ -4,7 +4,7 @@
 """
 import logging
 import time
-from app.core.redis_utilities.redis_cache import RedisCache
+from app.core.redis.redis_cache import RedisCache
 
 # ! Debounce: only allow event after interval of inactivity
 # todo: Add fail-open logic and Prometheus metrics if needed

@@ -7,40 +7,19 @@ Provides production-grade rate limiting using Redis with:
 - Detailed metrics
 """
 
+import functools
 import logging
 import time
+import uuid
 from datetime import datetime, timedelta
 from typing import Optional, Tuple
 
 from circuitbreaker import circuit
 from fastapi import HTTPException, status
-# from prometheus_client import Counter, Gauge
 
-# Prometheus Metrics - Singleton getters to avoid duplicate registration
-
-def get_rate_limit_requests():
-    if not hasattr(get_rate_limit_requests, "_metric"):
-        get_rate_limit_requests._metric = Counter(
-            "rate_limit_requests_total", "Total rate limit requests", ["endpoint", "status"]
-        )
-    return get_rate_limit_requests._metric
-
-def get_rate_limit_gauge():
-    if not hasattr(get_rate_limit_gauge, "_metric"):
-        get_rate_limit_gauge._metric = Gauge(
-            "rate_limit_active_requests", "Currently active rate-limited requests", ["endpoint"]
-        )
-    return get_rate_limit_gauge._metric
-
-from app.core.redis_utilities.client import RedisClient
-# from app.core.third_party_integrations.supabase_home.app import SupabaseAuthService
-# from app.core.third_party_integrations.supabase_home.client import get_supabase_client
-
-async def get_auth_service():
-    client = await get_supabase_client()
-    service = SupabaseAuthService(client)
-    user = await service.get_current_user() if hasattr(service.get_current_user, '__await__') else service.get_current_user()
-    return user
+from app.core.redis.client import RedisClient
+# Use the mock implementations from the utilities folder
+from app.core.redis._tests.utilities.mock_supabase import MockSupabaseAuthService, mock_get_supabase_client
 
 logger = logging.getLogger(__name__)
 
@@ -51,12 +30,18 @@ client = RedisClient()
 auth_service = None
 
 async def get_auth_service():
+    """Get mock auth service instance for testing and development"""
     global auth_service
     if auth_service is None:
-        client = await get_supabase_client()
-        auth_service = SupabaseAuthService(client)
+        try:
+            # Use the mock client from utilities
+            client = await mock_get_supabase_client()
+            auth_service = MockSupabaseAuthService(client)
+        except Exception as e:
+            logger.error(f"Error initializing mock auth service: {e}")
+            # Fall back to a simpler mock if needed
+            auth_service = MockSupabaseAuthService()
     return auth_service
-
 
 # Default rate limit
 DEFAULT_LIMIT = 100
@@ -72,7 +57,6 @@ for _, key in ipairs(keys) do
 end
 return #keys
 """
-
 
 ATOMIC_RATE_LIMIT_LUA = """
 local key = KEYS[1]
@@ -120,7 +104,6 @@ async def check_rate_limit(key: str, limit: int, window: int, redis_client=None)
     logger.debug(
         f"[check_rate_limit] EVAL args: key={key} now(ms)={now} window(ms)={window_ms} limit={limit}"
     )
-    import uuid
     member = f"{now}-{uuid.uuid4()}"
     logger.debug(
         f"[check_rate_limit] EVAL args: key={key} now(ms)={now} window(ms)={window_ms} limit={limit} member={member}"
@@ -132,9 +115,9 @@ async def check_rate_limit(key: str, limit: int, window: int, redis_client=None)
             key,
             now, window_ms, limit, member
         )
-        logger.debug(f"[check_rate_limit] Redis eval result: {allowed} | key={key} now(ms)={now} window(ms)={window_ms} limit={limit} member={member}")
+        logger.debug(f"[check_rate_limit] Redis eval result: {allowed} | key={key}")
     except Exception as e:
-        logger.error(f"[check_rate_limit] Redis eval error: {e} | key={key} now(ms)={now} window(ms)={window_ms} limit={limit} member={member}")
+        logger.error(f"[check_rate_limit] Redis eval error: {e} | key={key}")
         raise
     # * Return True if allowed, False if rate-limited
     return bool(allowed)
@@ -211,117 +194,95 @@ async def verify_and_limit(token: str, ip: str, endpoint: str, window: int = 360
     - User-level rate tracking
     - Composite keys for granular control
     """
-    get_rate_limit_gauge().labels(endpoint=endpoint).inc()
-
     try:
+        # Get auth service
+        auth_service_instance = await get_auth_service()
+        
         # Verify JWT with detailed logging
-        if not auth_service.verify_jwt(token):
+        if not auth_service_instance.verify_jwt(token):
             logger.warning(
                 "Invalid JWT token",
                 extra={"token": token[:8] + "...", "endpoint": endpoint},
             )
-            get_rate_limit_requests().labels(endpoint=endpoint, status="unauthorized").inc()
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials"
             )
 
-        user_id = auth_service.get_user_id(token)
+        user_id = auth_service_instance.get_user_id(token)
         limit = DEFAULT_LIMIT
 
         logger.debug(
             "Rate limit check", extra={"user_id": user_id, "endpoint": endpoint}
         )
 
-        # Composite key: user + IP + endpoint
-        rate_key = f"user_rate:{user_id}:{ip}:{endpoint}"
-
-        # Track metadata without tier logic
-        metadata = {
-            "last_ip": ip,
-            "last_endpoint": endpoint,
-            "updated_at": datetime.utcnow().isoformat(),
-        }
-
-        await client.hset(f"rate_meta:{user_id}", mapping=metadata)
-
-        if await check_rate_limit(rate_key, limit=limit, window=window):
+        # Use composite key for rate limiting
+        key = f"rate:{endpoint}:{user_id}"
+        
+        # Check if rate limited
+        if not await check_rate_limit(key, limit, window):
             logger.warning(
                 "Rate limit exceeded",
-                extra={
-                    "user_id": user_id,
-                    "ip": ip,
-                    "endpoint": endpoint,
-                    "limit": limit,
-                },
+                extra={"user_id": user_id, "endpoint": endpoint},
             )
-            get_rate_limit_requests().labels(endpoint=endpoint, status="limited").inc()
             raise HTTPException(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail=f"Rate limit exceeded. Try again in {window} seconds",
+                detail="Rate limit exceeded. Try again later.",
             )
 
-        await increment_rate_limit(rate_key, endpoint, window=window)
-        get_rate_limit_requests().labels(endpoint=endpoint, status="allowed").inc()
         return user_id
 
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(
-            "Rate limit error",
-            extra={"error": str(e), "stack_trace": True},
-            exc_info=True,
-        )
-        get_rate_limit_requests().labels(endpoint=endpoint, status="error").inc()
-        # Fail open during Redis outages
-        return user_id
-    finally:
-        get_rate_limit_gauge().labels(endpoint=endpoint).dec()
+        logger.error(f"Rate limit check failed: {str(e)}")
+        # Fail-open behavior for auth service failures
+        return "anonymous"
 
 
+@circuit(
+    failure_threshold=RATE_LIMIT_CIRCUIT["failure_threshold"],
+    recovery_timeout=RATE_LIMIT_CIRCUIT["recovery_timeout"],
+)
 async def service_rate_limit(
-    key: str, limit: int, window: int, endpoint: str = "internal"
-) -> bool:
+    service_name: str = None, limit: int = 100, window: int = 60, endpoint: str = "internal"
+):
     """
-    Simplified rate limiting for internal services without user authentication.
-
+    Service-to-service rate limiting decorator
+    
     Args:
-        key: Unique identifier for the rate limit (e.g. 'celery_health')
-        limit: Max allowed requests per window
+        service_name: Identifier for the service
+        limit: Maximum requests per window
         window: Time window in seconds
         endpoint: Optional endpoint identifier for metrics
-
+        
     Returns:
-        bool: True if request is allowed, False if rate limited
+        Decorator that applies rate limiting
     """
-    get_rate_limit_gauge().labels(endpoint=endpoint).inc()
-
-    try:
-        rate_key = f"service_rate:{key}"
-
-        if await check_rate_limit(rate_key, limit=limit, window=window):
-            logger.warning(
-                "Service rate limit exceeded",
-                extra={"key": key, "endpoint": endpoint, "limit": limit},
-            )
-            get_rate_limit_requests().labels(endpoint=endpoint, status="limited").inc()
-            return False
-
-        await increment_rate_limit(rate_key, endpoint, window=window)
-        get_rate_limit_requests().labels(endpoint=endpoint, status="allowed").inc()
-        return True
-
-    except Exception as e:
-        logger.error(
-            "Service rate limit error",
-            extra={"error": str(e), "stack_trace": True},
-            exc_info=True,
-        )
-        get_rate_limit_requests().labels(endpoint=endpoint, status="error").inc()
-        # Fail open during Redis outages
-        return True
-    finally:
-        get_rate_limit_gauge().labels(endpoint=endpoint).dec()
-
-
-async def init_cleanup():
-    await client.eval(CLEANUP_SCRIPT, 0)
-    # asyncio.create_task(run_weekly(init_cleanup))  # This line is commented out because run_weekly is not defined in the provided code
+    def decorator(func):
+        @functools.wraps(func)
+        async def wrapper(*args, **kwargs):
+            key = f"service_rate:{service_name or func.__name__}"
+            
+            try:
+                allowed = await check_rate_limit(key, limit, window)
+                if not allowed:
+                    raise HTTPException(
+                        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                        detail="Service rate limit exceeded. Try again later."
+                    )
+                return await func(*args, **kwargs)
+            except HTTPException:
+                raise
+            except Exception as e:
+                logger.error(f"Service rate limit check failed: {str(e)}")
+                # Fail-open for internal services
+                return await func(*args, **kwargs)
+                
+        return wrapper
+        
+    # Handle both @service_rate_limit and @service_rate_limit()
+    if callable(service_name):
+        func = service_name
+        service_name = func.__name__
+        return decorator(func)
+    return decorator

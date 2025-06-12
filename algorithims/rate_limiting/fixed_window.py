@@ -5,7 +5,7 @@
 import logging
 
 from typing import Any
-from app.core.redis_utilities.redis_cache import RedisCache
+from app.core.redis.redis_cache import RedisCache
 
 # ! This implementation assumes Redis is healthy and available.
 # todo: Add fail-open logic and Prometheus metrics if needed

@@ -4,7 +4,7 @@ Redis cache consistency tests
 import asyncio
 import pytest
 
-from app.core.redis_utilities.redis_cache import RedisCache
+from app.core.redis.redis_cache import RedisCache
 
 
 

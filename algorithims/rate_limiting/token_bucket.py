@@ -4,7 +4,7 @@
 """
 import logging
 import time
-from app.core.redis_utilities.redis_cache import RedisCache
+from app.core.redis.redis_cache import RedisCache
 
 # ! Uses atomic Lua script for token refill and consume
 # todo: Add fail-open logic and Prometheus metrics if needed

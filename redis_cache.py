@@ -14,16 +14,17 @@ from collections.abc import Callable
 from functools import wraps
 from typing import Any, Optional
 import asyncio
-# from opentelemetry import trace
+# from opentelemetry import trace  # Optional dependency
 from redis import asyncio  # ! Needed for coroutine detection
 
+# Optional metrics dependencies
 # from app.core.prometheus.metrics import (
 #     get_redis_cache_deletes,
 #     get_redis_cache_hits,
 #     get_redis_cache_misses,
 #     get_redis_cache_sets,
 # )
-from app.core.redis_utilities.config import RedisConfig
+from app.core.redis.config import RedisConfig
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +38,7 @@ class RedisCache:
         # ! Accepts an async Redis client (redis.asyncio.Redis)
         self._client = client
         self.stats: dict[str, int] = {"hits": 0, "misses": 0, "sets": 0, "deletes": 0}
-        self.tracer = trace.get_tracer(__name__)
+        # self.tracer = trace.get_tracer(__name__)  # Optional tracing
 
     async def get_or_set(self, key: str, value_fn, ttl: int | None = None):
         """
@@ -53,13 +54,13 @@ class RedisCache:
             value = await self.get(key)
             if value is not None:
                 self.stats["hits"] += 1
-                get_redis_cache_hits().inc()
+                # get_redis_cache_hits().inc()  # Optional metrics
                 return value
             # Compute value and cache it
             value = await value_fn() if callable(value_fn) and hasattr(value_fn, "__call__") else value_fn
             await self.set(key, value, ttl=ttl)
             self.stats["sets"] += 1
-            get_redis_cache_sets().inc()
+            # get_redis_cache_sets().inc()  # Optional metrics
             return value
         except Exception as e:
             logger.error(f"get_or_set failed for key {key}: {str(e)}")
@@ -67,22 +68,22 @@ class RedisCache:
 
     async def get(self, key: str) -> Any | None:
         """Get cached value with stats tracking"""
-        with self.tracer.start_as_current_span("redis_cache.get"):
-            try:
-                value = await self._client.get(key)
-                # * Always decode bytes to string for consistency
-                if isinstance(value, bytes):
-                    value = value.decode()
-                if value:
-                    self.stats["hits"] += 1
-                    get_redis_cache_hits().inc()
-                    return value
-                self.stats["misses"] += 1
-                get_redis_cache_misses().inc()
-                return None
-            except Exception as e:
-                logger.error(f"Cache get failed for key {key}: {str(e)}")
-                raise
+        # Use a simpler implementation without tracing
+        try:
+            value = await self._client.get(key)
+            # * Always decode bytes to string for consistency
+            if isinstance(value, bytes):
+                value = value.decode()
+            if value:
+                self.stats["hits"] += 1
+                # get_redis_cache_hits().inc()  # Optional metrics
+                return value
+            self.stats["misses"] += 1
+            # get_redis_cache_misses().inc()  # Optional metrics
+            return None
+        except Exception as e:
+            logger.error(f"Cache get failed for key {key}: {str(e)}")
+            raise
 
     async def set(self, key: str, value: Any, ttl: int | None) -> bool:
         """
@@ -91,19 +92,19 @@ class RedisCache:
         """
         if ttl is None:
             ttl = RedisConfig.REDIS_CACHE_TTL
-        with self.tracer.start_as_current_span("redis_cache.set"):
-            self.stats["sets"] += 1
-            get_redis_cache_sets().inc()
-            try:
-                return await self._client.set(key, value, ex=ttl)
-            except Exception as e:
-                logger.error(f"Cache set failed for key {key}: {str(e)}")
-                raise
+        # Simplified implementation without tracing
+        self.stats["sets"] += 1
+        # get_redis_cache_sets().inc()  # Optional metrics
+        try:
+            return await self._client.set(key, value, ex=ttl)
+        except Exception as e:
+            logger.error(f"Cache set failed for key {key}: {str(e)}")
+            raise
 
     async def delete(self, key: str) -> int:
         """Delete cached value"""
         self.stats["deletes"] += 1
-        get_redis_cache_deletes().inc()
+        # get_redis_cache_deletes().inc()  # Optional metrics
         return await self._client.delete(key)
 
     def get_stats(self) -> dict:
@@ -116,7 +117,7 @@ class RedisCache:
         if keys:
             deleted = await self._client.delete(*keys)
             self.stats["deletes"] += deleted
-            get_redis_cache_deletes().inc(deleted)
+            # get_redis_cache_deletes().inc(deleted)  # Optional metrics
             return deleted
         return 0
 

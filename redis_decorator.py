@@ -7,18 +7,10 @@ import random
 from collections.abc import Callable, Coroutine
 from typing import Any, TypeVar
 
-# from prometheus_client import Counter
-
-from app.core.redis_utilities.config import RedisConfig
-from app.core.redis_utilities.client import RedisClient
+from app.core.redis.config import RedisConfig
+from app.core.redis.client import RedisClient
 
 logger = logging.getLogger(__name__)
-
-# Metrics
-CACHE_HITS = Counter("cache_hits", "Number of cache hits", ["key_pattern"])
-CACHE_INVALIDATIONS = Counter(
-    "cache_invalidations", "Number of cache invalidations", ["pattern"]
-)
 
 
 async def get_redis_client() -> RedisClient:
@@ -71,7 +63,6 @@ def cache(
 
             cached = await client.get(key, timeout=RedisConfig.REDIS_TIMEOUT)
             if cached is not None:
-                CACHE_HITS.labels(key_pattern=key).inc()
                 return cached
 
             logger.debug(f"Cache miss for {key}")
@@ -103,8 +94,6 @@ def get_or_set_cache(
             try:
                 cached = await redis.get(key)
                 if cached:
-                    CACHE_HITS.labels(key_pattern=key.split(":")[0]).inc()
-
                     if warm_cache and random.random() < 0.1:
                         asyncio.create_task(
                             _refresh_cache(key, func, args, kwargs, redis, ttl)

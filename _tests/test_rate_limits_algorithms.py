@@ -23,12 +23,12 @@ import asyncio
 import pytest
 import uuid
 
-from app.core.redis_utilities.algorithims.rate_limiting.debounce import is_allowed_debounce
-from app.core.redis_utilities.algorithims.rate_limiting.fixed_window import is_allowed_fixed_window
-from app.core.redis_utilities.algorithims.rate_limiting.sliding_window import is_allowed_sliding_window
-from app.core.redis_utilities.algorithims.rate_limiting.throttle import is_allowed_throttle
-from app.core.redis_utilities.algorithims.rate_limiting.token_bucket import is_allowed_token_bucket
-from app.core.redis_utilities.redis_cache import RedisCache
+from app.core.redis.algorithims.rate_limiting.debounce import is_allowed_debounce
+from app.core.redis.algorithims.rate_limiting.fixed_window import is_allowed_fixed_window
+from app.core.redis.algorithims.rate_limiting.sliding_window import is_allowed_sliding_window
+from app.core.redis.algorithims.rate_limiting.throttle import is_allowed_throttle
+from app.core.redis.algorithims.rate_limiting.token_bucket import is_allowed_token_bucket
+from app.core.redis.redis_cache import RedisCache
 
 pytestmark = pytest.mark.asyncio
 
@@ -91,11 +91,11 @@ async def test_algorithms_allow_and_block(algo_func, kwargs, redis_client):
     assert allowed4 is True, f"allowed4 was {allowed4} for {algo_func.__name__} with kwargs={kwargs}"
 
 @pytest.mark.parametrize("algo_func,kwargs,redis_path", [
-    (is_allowed_fixed_window, {"key": "failopen:fixed", "limit": 2, "window": 2}, "app.core.redis_utilities.algorithims.fixed_window.RedisCache"),
-    (is_allowed_sliding_window, {"key": "failopen:sliding", "limit": 2, "window": 2}, "app.core.redis_utilities.algorithims.sliding_window.RedisCache"),
-    (is_allowed_token_bucket, {"key": "failopen:bucket", "capacity": 2, "refill_rate": 1, "interval": 2}, "app.core.redis_utilities.algorithims.token_bucket.RedisCache"),
-    (is_allowed_throttle, {"key": "failopen:throttle", "interval": 2}, "app.core.redis_utilities.algorithims.throttle.RedisCache"),
-    (is_allowed_debounce, {"key": "failopen:debounce", "interval": 2}, "app.core.redis_utilities.algorithims.debounce.RedisCache"),
+    (is_allowed_fixed_window, {"key": "failopen:fixed", "limit": 2, "window": 2}, "app.core.redis.algorithims.fixed_window.RedisCache"),
+    (is_allowed_sliding_window, {"key": "failopen:sliding", "limit": 2, "window": 2}, "app.core.redis.algorithims.sliding_window.RedisCache"),
+    (is_allowed_token_bucket, {"key": "failopen:bucket", "capacity": 2, "refill_rate": 1, "interval": 2}, "app.core.redis.algorithims.token_bucket.RedisCache"),
+    (is_allowed_throttle, {"key": "failopen:throttle", "interval": 2}, "app.core.redis.algorithims.throttle.RedisCache"),
+    (is_allowed_debounce, {"key": "failopen:debounce", "interval": 2}, "app.core.redis.algorithims.debounce.RedisCache"),
 ])
 async def test_algorithms_fail_open(algo_func, kwargs, redis_path, monkeypatch):
     # Generate a unique key per test run for isolation

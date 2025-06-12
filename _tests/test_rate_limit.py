@@ -13,7 +13,9 @@ from unittest.mock import patch
 
 import pytest
 
-from app.core.redis_utilities.rate_limit import check_rate_limit
+from app.core.redis.rate_limit import check_rate_limit
+from fastapi import HTTPException
+from app.core.redis.rate_limit import verify_and_limit, service_rate_limit
 
 logger = logging.getLogger(__name__)
 
@@ -22,8 +24,8 @@ logger = logging.getLogger(__name__)
 
 from unittest.mock import patch
 
-@patch("app.core.redis_utilities.rate_limit.get_rate_limit_requests")
-@patch("app.core.redis_utilities.rate_limit.get_rate_limit_gauge")
+@patch("app.core.redis.rate_limit.get_rate_limit_requests")
+@patch("app.core.redis.rate_limit.get_rate_limit_gauge")
 @pytest.mark.asyncio
 async def test_burst_handling(mock_gauge, mock_requests, redis_client):
     """
@@ -68,7 +70,7 @@ async def test_burst_handling(mock_gauge, mock_requests, redis_client):
 async def test_distributed_consistency_failover():
     """Test rate limiting failover when Redis client is unavailable (fail-closed)"""
     identifier = "dist_id"
-    with patch("app.core.redis_utilities.client.RedisClient.get_client") as mock_get_client:
+    with patch("app.core.redis.client.RedisClient.get_client") as mock_get_client:
         mock_get_client.return_value = None
         assert await check_rate_limit(identifier, 5, 60) is False
 
@@ -87,7 +89,7 @@ async def test_distributed_consistency_normal(redis_client):
 
 
 
-from app.core.redis_utilities import rate_limit
+from app.core.redis import rate_limit
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
@@ -140,4 +142,39 @@ async def test_performance_under_load(redis_client):
         raise
     finally:
         await redis_client.close()
+
+
+@pytest.mark.asyncio
+async def test_verify_and_limit_with_mocks(patch_supabase, redis_client):
+    """Test user authentication and rate limiting with mocked Supabase services"""
+    try:
+        # Should allow requests with valid token
+        user_id = await verify_and_limit("valid_token", "127.0.0.1", "test_endpoint", window=60)
+        assert user_id == "test_user_id"
+        
+        # Should raise HTTP exception for invalid token
+        with pytest.raises(HTTPException) as excinfo:
+            await verify_and_limit("invalid_token", "127.0.0.1", "test_endpoint", window=60)
+        assert excinfo.value.status_code == 401
+        
+    except Exception as e:
+        logger.error(f"verify_and_limit test failed: {e}")
+        raise
+
+
+@pytest.mark.asyncio
+async def test_service_rate_limit_function(redis_client):
+    """Test service-to-service rate limiting with mocked metrics"""
+    endpoint = "service_endpoint"
+    key = f"service_test_{datetime.now().timestamp()}"
+    
+    # Should allow requests under the limit
+    for _ in range(10):
+        assert await service_rate_limit(key, 10, 60, endpoint=endpoint)
+    
+    # Should reject requests over the limit
+    assert not await service_rate_limit(key, 10, 60, endpoint=endpoint)
+    
+    # Different services should have separate limits
+    assert await service_rate_limit(f"{key}_other", 10, 60, endpoint=endpoint)
 
