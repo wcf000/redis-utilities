@@ -194,24 +194,3 @@ def mock_supabase_auth_service():
 def mock_supabase_client():
     """Return a mock Supabase client"""
     return mock_get_supabase_client()
-
-
-@pytest.fixture
-def patch_supabase():
-    """
-    Patch Supabase dependencies for tests
-    Returns a context manager that can be used in tests
-    """
-    # Create patches for Supabase imports
-    app_patch = patch('app.core.third_party_integrations.supabase_home.app.SupabaseAuthService', 
-                      return_value=MockSupabaseAuthService())
-    
-    client_patch = patch('app.core.third_party_integrations.supabase_home.client.get_supabase_client', 
-                         side_effect=mock_get_supabase_client)
-    
-    # Start and stop patches
-    app_patch.start()
-    client_patch.start()
-    yield
-    app_patch.stop()
-    client_patch.stop()

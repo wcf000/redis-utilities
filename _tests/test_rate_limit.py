@@ -21,15 +21,11 @@ logger = logging.getLogger(__name__)
 
 
 
-
-from unittest.mock import patch
-
-@patch("app.core.redis.rate_limit.get_rate_limit_requests")
-@patch("app.core.redis.rate_limit.get_rate_limit_gauge")
 @pytest.mark.asyncio
-async def test_burst_handling(mock_gauge, mock_requests, redis_client):
+async def test_burst_handling(redis_client):
     """
-    Verify burst traffic handling with Prometheus metrics. Should allow 15 requests and reject 5 when limit=15.
+    Verify burst traffic handling without Prometheus metrics.
+    Should allow 15 requests and reject 5 when limit=15.
     Uses a fresh Redis key for test isolation.
     """
     import uuid
@@ -46,17 +42,25 @@ async def test_burst_handling(mock_gauge, mock_requests, redis_client):
         import random
         async def burst_task(i):
             await asyncio.sleep(random.uniform(0, 0.002))  # 0-2 ms jitter
-            allowed = await rate_limit.check_rate_limit(identifier, limit, window)
-            print(f"Task {i}: allowed={allowed}")
+            allowed = await check_rate_limit(identifier, limit, window, redis_client=redis_client)
+            logger.debug(f"Task {i}: allowed={allowed}")
             return allowed
+        
         tasks = [burst_task(i) for i in range(20)]
         results = await asyncio.gather(*tasks)
 
         allowed = results.count(True)
         rejected = results.count(False)
-        print(f"Allowed: {allowed}, Rejected: {rejected}")
+        logger.info(f"Allowed: {allowed}, Rejected: {rejected}")
+        
+        # We should have exactly 15 allowed requests (the limit)
         assert allowed == 15
+        # And 5 rejected requests (20 total - 15 allowed)
         assert rejected == 5
+        
+        # Verify the execution time for performance monitoring
+        duration = (datetime.now() - start_time).total_seconds()
+        logger.info(f"Burst test completed in {duration:.3f} seconds")
 
     except AssertionError as e:
         logger.error(f"Burst handling test failed: {e}")
@@ -145,7 +149,7 @@ async def test_performance_under_load(redis_client):
 
 
 @pytest.mark.asyncio
-async def test_verify_and_limit_with_mocks(patch_supabase, redis_client):
+async def test_verify_and_limit_with_mocks(redis_client):
     """Test user authentication and rate limiting with mocked Supabase services"""
     try:
         # Should allow requests with valid token
@@ -165,16 +169,26 @@ async def test_verify_and_limit_with_mocks(patch_supabase, redis_client):
 @pytest.mark.asyncio
 async def test_service_rate_limit_function(redis_client):
     """Test service-to-service rate limiting with mocked metrics"""
-    endpoint = "service_endpoint"
-    key = f"service_test_{datetime.now().timestamp()}"
-    
-    # Should allow requests under the limit
-    for _ in range(10):
-        assert await service_rate_limit(key, 10, 60, endpoint=endpoint)
-    
-    # Should reject requests over the limit
-    assert not await service_rate_limit(key, 10, 60, endpoint=endpoint)
-    
-    # Different services should have separate limits
-    assert await service_rate_limit(f"{key}_other", 10, 60, endpoint=endpoint)
+    try:
+        import uuid
+        # Use a unique key for each test run to avoid conflicts
+        test_id = str(uuid.uuid4())
+        endpoint = "service_endpoint"
+        key = f"service_test_{test_id}"
+        
+        # Should allow requests under the limit
+        for _ in range(10):
+            result = await service_rate_limit(key, 10, 60, endpoint=endpoint, redis_client=redis_client)
+            assert result is True
+        
+        # Should reject requests over the limit
+        result = await service_rate_limit(key, 10, 60, endpoint=endpoint, redis_client=redis_client)
+        assert result is False
+        
+        # Different services should have separate limits
+        result = await service_rate_limit(f"{key}_other", 10, 60, endpoint=endpoint, redis_client=redis_client)
+        assert result is True
+    except Exception as e:
+        logger.error(f"Service rate limit test failed: {e}")
+        raise
 

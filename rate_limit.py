@@ -244,24 +244,41 @@ async def verify_and_limit(token: str, ip: str, endpoint: str, window: int = 360
     recovery_timeout=RATE_LIMIT_CIRCUIT["recovery_timeout"],
 )
 async def service_rate_limit(
-    service_name: str = None, limit: int = 100, window: int = 60, endpoint: str = "internal"
+    service_name: str, 
+    limit: int = 100, 
+    window: int = 60, 
+    endpoint: str = "internal",
+    redis_client=None
 ):
     """
-    Service-to-service rate limiting decorator
+    Service-to-service rate limiting
+    
+    Can be used in two ways:
+    1. As a direct function call: await service_rate_limit("my_service", 100, 60)
+       Returns: boolean indicating if request is allowed
+    2. As a decorator: @service_rate_limit(service_name="my_service", limit=100)
+       Returns: decorated function that applies rate limiting
     
     Args:
         service_name: Identifier for the service
         limit: Maximum requests per window
         window: Time window in seconds
         endpoint: Optional endpoint identifier for metrics
+        redis_client: Optional redis client for testing
         
     Returns:
-        Decorator that applies rate limiting
+        bool or decorator: Boolean if used directly, decorator function if used as decorator
     """
+    # If being used as a direct function (not as a decorator)
+    if not callable(service_name) and isinstance(service_name, str):
+        key = f"service_rate:{endpoint}:{service_name}"
+        return await check_rate_limit(key, limit, window, redis_client=redis_client)
+    
+    # If being used as a decorator
     def decorator(func):
         @functools.wraps(func)
         async def wrapper(*args, **kwargs):
-            key = f"service_rate:{service_name or func.__name__}"
+            key = f"service_rate:{endpoint}:{func.__name__}"
             
             try:
                 allowed = await check_rate_limit(key, limit, window)
@@ -279,10 +296,11 @@ async def service_rate_limit(
                 return await func(*args, **kwargs)
                 
         return wrapper
-        
-    # Handle both @service_rate_limit and @service_rate_limit()
+    
+    # Handle case when used as @service_rate_limit without parentheses
     if callable(service_name):
         func = service_name
         service_name = func.__name__
         return decorator(func)
+    
     return decorator
