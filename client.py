@@ -14,9 +14,6 @@ import logging
 from typing import Any
 
 from circuitbreaker import circuit
-# from opentelemetry import trace  # Optional dependency
-# from opentelemetry.trace import StatusCode  # Optional dependency
-# from prometheus_client import Counter, Gauge, Histogram  # Optional dependency
 from redis.asyncio import Redis, RedisCluster
 from redis.asyncio.cluster import ClusterNode
 from redis.exceptions import RedisError, TimeoutError
@@ -49,72 +46,6 @@ logger = logging.getLogger(__name__)
 DEFAULT_CONNECTION_TIMEOUT = 5.0
 DEFAULT_SOCKET_TIMEOUT = 10.0
 DEFAULT_COMMAND_TIMEOUT = 5.0
-
-# Prometheus metrics - Stub implementations
-# These will be replaced with actual implementations when needed
-def get_shard_size_gauge():
-    class DummyGauge:
-        def labels(self, **kwargs):
-            return self
-        def set(self, value):
-            pass
-    if not hasattr(get_shard_size_gauge, "_metric"):
-        get_shard_size_gauge._metric = DummyGauge()
-    return get_shard_size_gauge._metric
-
-def get_shard_ops_gauge():
-    class DummyGauge:
-        def labels(self, **kwargs):
-            return self
-        def set(self, value):
-            pass
-    if not hasattr(get_shard_ops_gauge, "_metric"):
-        get_shard_ops_gauge._metric = DummyGauge()
-    return get_shard_ops_gauge._metric
-
-def get_request_duration_histogram():
-    class DummyHistogram:
-        def labels(self, **kwargs):
-            return self
-        def observe(self, value):
-            pass
-    if not hasattr(get_request_duration_histogram, "_metric"):
-        get_request_duration_histogram._metric = DummyHistogram()
-    return get_request_duration_histogram._metric
-
-def get_error_counter():
-    class DummyCounter:
-        def labels(self, **kwargs):
-            return self
-        def inc(self, amount=1):
-            pass
-    if not hasattr(get_error_counter, "_metric"):
-        get_error_counter._metric = DummyCounter()
-    return get_error_counter._metric
-
-# Dummy tracer implementation
-class DummySpan:
-    def __enter__(self):
-        return self
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        pass
-    def set_attribute(self, key, value):
-        pass
-    def set_attributes(self, attributes):
-        pass
-    def set_status(self, status):
-        pass
-    def record_exception(self, exception):
-        pass
-
-class DummyTracer:
-    def start_as_current_span(self, name):
-        return DummySpan()
-    def get_current_span(self):
-        return DummySpan()
-
-# Replace the OpenTelemetry tracer with our dummy implementation
-tracer = DummyTracer()
 
 
 class RedisClient:
@@ -236,8 +167,6 @@ class RedisClient:
     async def __aenter__(self):
         if not await self.is_healthy():
             raise ConnectionError("Redis connection failed")
-        # Commented out metrics task since we're not using Prometheus
-        # self._metrics_task = asyncio.create_task(self._update_metrics())
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
@@ -311,7 +240,6 @@ class RedisClient:
     async def get(self, key: str, timeout: float = DEFAULT_COMMAND_TIMEOUT) -> Any:
         """Get value from Redis"""
         try:
-            # Simple implementation without tracing
             value = await (await self.get_client()).get(key)
             return json.loads(value) if value else None
         except Exception as e:
@@ -332,7 +260,6 @@ class RedisClient:
     ) -> bool:
         """Set value in Redis"""
         try:
-            # Simple implementation without tracing
             result = await (await self.get_client()).set(
                 key, json.dumps(value), ex=ex
             )
@@ -355,22 +282,6 @@ class RedisClient:
             return await (await self.get_client()).ping()
         except (RedisError, TimeoutError):
             return False
-
-    async def _update_metrics(self):
-        """
-        Periodically update Redis metrics
-        Note: This is a no-op since we've removed Prometheus,
-        but kept for future compatibility
-        """
-        while True:
-            try:
-                # Sleep without doing anything - metrics are disabled
-                await asyncio.sleep(60)
-            except asyncio.CancelledError:
-                break
-            except Exception as e:
-                logger.error(f"Metrics update failed: {e}")
-                await asyncio.sleep(60)
 
     async def incr(self, key: str, timeout: float = DEFAULT_COMMAND_TIMEOUT) -> int:
         """Increment a key's integer value by 1. Returns new value."""
