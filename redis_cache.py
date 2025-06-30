@@ -14,16 +14,10 @@ from collections.abc import Callable
 from functools import wraps
 from typing import Any, Optional
 import asyncio
+import time
 # from opentelemetry import trace  # Optional dependency
 from redis import asyncio  # ! Needed for coroutine detection
-
-# Optional metrics dependencies
-# from app.core.prometheus.metrics import (
-#     get_redis_cache_deletes,
-#     get_redis_cache_hits,
-#     get_redis_cache_misses,
-#     get_redis_cache_sets,
-# )
+from app.core.prometheus.metrics import get_cache_count, get_cache_latency
 from app.core.redis.config import RedisConfig
 
 logger = logging.getLogger(__name__)
@@ -70,16 +64,19 @@ class RedisCache:
         """Get cached value with stats tracking"""
         # Use a simpler implementation without tracing
         try:
+            start = time.time()
             value = await self._client.get(key)
+            elapsed = time.time() - start
+            get_cache_latency().labels('redis', 'get').observe(elapsed)
             # * Always decode bytes to string for consistency
             if isinstance(value, bytes):
                 value = value.decode()
             if value:
                 self.stats["hits"] += 1
-                # get_redis_cache_hits().inc()  # Optional metrics
+                get_cache_count().labels('redis', 'hit').inc()
                 return value
             self.stats["misses"] += 1
-            # get_redis_cache_misses().inc()  # Optional metrics
+            get_cache_count().labels('redis', 'miss').inc()
             return None
         except Exception as e:
             logger.error(f"Cache get failed for key {key}: {str(e)}")
@@ -93,19 +90,25 @@ class RedisCache:
         if ttl is None:
             ttl = RedisConfig.REDIS_CACHE_TTL
         # Simplified implementation without tracing
+        start = time.time()
         self.stats["sets"] += 1
-        # get_redis_cache_sets().inc()  # Optional metrics
         try:
-            return await self._client.set(key, value, ex=ttl)
+            result = await self._client.set(key, value, ex=ttl)
+            elapsed = time.time() - start
+            get_cache_count().labels('redis', 'set').inc()
+            return result
         except Exception as e:
             logger.error(f"Cache set failed for key {key}: {str(e)}")
             raise
 
     async def delete(self, key: str) -> int:
         """Delete cached value"""
+        start = time.time()
         self.stats["deletes"] += 1
-        # get_redis_cache_deletes().inc()  # Optional metrics
-        return await self._client.delete(key)
+        result = await self._client.delete(key)
+        elapsed = time.time() - start
+        get_cache_count().labels('redis', 'delete').inc()
+        return result
 
     def get_stats(self) -> dict:
         """Get cache statistics"""
@@ -117,7 +120,9 @@ class RedisCache:
         if keys:
             deleted = await self._client.delete(*keys)
             self.stats["deletes"] += deleted
-            # get_redis_cache_deletes().inc(deleted)  # Optional metrics
+            # count as multiple delete operations
+            for _ in range(deleted):
+                get_cache_count().labels('redis', 'delete').inc()
             return deleted
         return 0
 
